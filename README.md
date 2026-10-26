@@ -48,13 +48,37 @@ El modelo de base de datos está compuesto por las siguientes entidades principa
 *   **Ventas y Detalle_Ventas:** Registro de transacciones y productos vendidos (resolviendo la relación de muchos a muchos).
 *   **Mermas:** Registro de bajas de stock por pérdidas (vencimiento, deterioro, hurto, error administrativo).
 
+## Construcción de la Base de Datos y Lógica de Consultas
+
+El diseño y la implementación de la base de datos se realizaron siguiendo los principios de normalización (hasta 3FN) para evitar la redundancia de datos y garantizar la integridad referencial. A continuación, se detallan las decisiones técnicas más relevantes del script SQL y de las consultas documentadas.
+
+### 1. Decisiones de Diseño (Script DDL)
+*   **Uso de `AUTO_INCREMENT`:** Todas las claves primarias se definieron como enteros autoincrementales. Esto delega al motor de la base de datos la generación de identificadores únicos, evitando colisiones de datos y simplificando el código de Python al momento de insertar nuevos registros.
+*   **Restricciones `CHECK`:** Se implementaron validaciones a nivel de motor para proteger la lógica del negocio. Por ejemplo, se restringió el campo `Tipo_Venta` a solo tres opciones ('UNIDAD', 'PESABLE', 'DOCENA'), se impidió que el `Stock_Base` sea menor a cero y se limitaron los motivos de merma a un listado cerrado. Esto evita que datos "basura" ingresen al sistema, incluso si el programa de Python falla.
+*   **Integridad Referencial (`FOREIGN KEY`):** Las tablas transaccionales (como `DETALLE_VENTAS` y `DETALLE_COMPRAS`) dependen estrictamente de las tablas maestras (`PRODUCTOS`, `VENTAS`, `COMPRAS`). Se utilizó la cláusula `ON DELETE CASCADE` en las tablas de detalle para que, si se elimina una venta o compra por error, sus renglones asociados se borren automáticamente y no queden "huérfanos" en la base.
+
+### 2. Lógica de las Consultas SQL Documentadas
+Las consultas fueron diseñadas para resolver problemáticas reales de gestión de la panadería, demostrando el uso de herramientas avanzadas de SQL:
+
+*   **Consulta 1 (JOIN básico):** Resuelve el reporte de facturación diaria cruzando la tabla de `VENTAS` con `CLIENTES`. Se utiliza un `INNER JOIN` para mostrar el nombre del cliente en lugar de su ID numérico, facilitando la lectura del reporte de caja.
+*   **Consulta 2 (Uso de `CASE` y cálculo matemático):** Debido a que el sistema almacena el stock en su unidad base (gramos para productos pesables), esta consulta traduce ese número a un formato legible para el usuario (kilos o docenas). Se utiliza una estructura condicional `CASE` que divide el stock por el factor de conversión del producto, permitiendo al dueño saber exactamente cuántos kilos de pan o docenas de facturas le quedan.
+*   **Consulta 3 (Funciones de agregación):** Utiliza `COUNT` y `SUM` junto con un `GROUP BY` sobre las categorías. Esta consulta es de vital importancia para la toma de decisiones gerenciales, ya que permite identificar qué rubro del negocio (panificados, pastelería, bebidas) genera mayores ingresos. Al igual que en la consulta anterior, se aplica la división por el factor de conversión para que la suma de dinero sea exacta y no calcule gramos como si fueran kilos.
+*   **Consulta 4 (Subconsulta y control de vencimientos):** Implementa una subconsulta dentro de un `WHERE ... IN`. Primero, busca en la tabla `DETALLE_COMPRAS` todos los lotes de mercadería cuya fecha de vencimiento esté a 3 días o menos de la fecha actual (usando la función `DATE_ADD`). Luego, con ese resultado, busca en la tabla `PRODUCTOS` cuáles son los artículos afectados. Esta consulta es la base del sistema de alertas tempranas para evitar mermas por vencimiento.
+*   **Consulta 5 (JOIN, agregación y subconsulta combinados):** Es la consulta más compleja y representa un reporte de rendimiento comercial. Cruza las ventas con los productos, calcula la recaudación total por producto y utiliza una subconsulta en el `SELECT` para traer el nombre de la categoría. Finalmente, ordena los resultados de mayor a menor (`ORDER BY ... DESC`) y limita la salida a los 3 primeros (`LIMIT 3`), identificando los productos estrella de la panadería.
+
+### 3. Seguridad y Roles en el SGBD
+Siguiendo las buenas prácticas de administración de bases de datos, no se implementó un sistema de contraseñas a nivel de aplicación. En su lugar, se crearon dos roles directamente en MySQL:
+*   **`cajero_panaderia`**: Restringido a leer productos, registrar clientes y asentar ventas. Tiene prohibido modificar precios o alterar la estructura.
+*   **`dueno_panaderia`**: Con permisos totales sobre el esquema, encargado de la gestión de compras, mermas y actualización de precios.
+Esto garantiza que, independientemente de la interfaz que use el empleado, el motor de la base de datos proteja la información sensible.
+
 
 ## Estado del Proyecto
 
-*   [x] Análisis de requerimientos y definición de entidades.
 *   [x] Diseño del modelo Entidad-Relación ampliado y normalización (3FN).
-*   [x] Definición de la política de seguridad y roles de base de datos.
-*   [ ] Implementación del esquema en el SGBD (Script DDL).
+*   [x] Implementación del esquema en el SGBD (Script DDL) y definición de roles de seguridad.
+*   [x] Carga de datos de prueba (DML) y simulación de ventas/compras.
+*   [x] Documentación de las 5 consultas SQL requeridas (JOIN, agregación, subconsultas).
 *   [ ] Desarrollo de la interfaz gráfica (Tkinter).
 *   [ ] Conexión e integración de operaciones CRUD y lógica de stock.
 
